@@ -24,6 +24,16 @@ curl -L -o vosk-model-ja-0.22.zip https://alphacephei.com/vosk/models/vosk-model
 ```
 
 ## Usage
+Set the sound output to be Voicemeeter Input
+![img.png](img.png)
+
+Set the sound input to be CABLE Output
+![img_1.png](img_1.png)
+
+In voice meeter, set one output to be the real speaker, and the other to be CABLE Input
+![img_3.png](img_3.png)
+![img_2.png](img_2.png)
+
 There are two scripts recommended, using different technologies.
 1. Using OPENAI whisper
 ```
