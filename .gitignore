@@ -32,3 +32,6 @@ model-small-ja/
 # deprecated
 /live_tran_1.py
 /live_tran_vosk.py
+
+# wav file
+*.wav

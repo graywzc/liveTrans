@@ -62,10 +62,10 @@ def start_audio_stream():
                 if text_ja:
                     text_en = translate_japanese_to_english(text_ja)
                     full_transcript += f"{text_furigana}\n→ {text_en}\n\n"
-                    update_gui(full_transcript)
+                    render_full(full_transcript)
             else:
                 partial = json.loads(recognizer.PartialResult())
-                update_gui(full_transcript + partial.get("partial", ""))
+                render_full(full_transcript + partial.get("partial", ""))
 
 # === GUI Setup ===
 def update_gui(text):
@@ -74,6 +74,18 @@ def update_gui(text):
     output_text.insert(tk.END, text)
     output_text.see(tk.END)
     output_text.configure(state='disabled')
+
+
+
+def _render_full(text: str):
+    output_text.configure(state="normal")
+    output_text.delete("1.0", tk.END)
+    output_text.insert(tk.END, text)
+    output_text.see(tk.END)
+    output_text.configure(state="disabled")
+
+def render_full(text: str):
+    root.after(0, _render_full, text)
 
 root = tk.Tk()
 root.title("🎙️ Japanese Live Transcription + Translation")
@@ -86,7 +98,7 @@ frame.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
 scrollbar = tk.Scrollbar(frame)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-output_text = tk.Text(frame, font=("Consolas", 18), fg="lime", bg="black",
+output_text = tk.Text(frame, font=("Consolas", 18), fg="#00FF00", bg="black",
                       wrap=tk.WORD, yscrollcommand=scrollbar.set)
 output_text.pack(side=tk.LEFT, expand=True, fill=tk.BOTH)
 
