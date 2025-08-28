@@ -10,6 +10,9 @@ import collections
 import tkinter as tk
 from tkinter import scrolledtext
 from deep_translator import GoogleTranslator
+import threading, queue
+ui_queue = queue.Queue()
+
 
 # === Config ===
 samplerate = 16000
@@ -46,6 +49,18 @@ def translate_japanese_to_english(text):
     except Exception as e:
         return f"[Translation error: {e}]"
 
+def make_readonly(text):
+    # Block typing, cut/paste, undo/redo
+    def no_edit(_): return "break"
+    for seq in ("<Key>", "<<Cut>>", "<<Paste>>", "<<Undo>>", "<<Redo>>"):
+        text.bind(seq, no_edit)
+
+    # Allow copy + select all on Win/Linux (Ctrl) and macOS (Cmd)
+    text.bind("<Control-c>", lambda e: None)
+    text.bind("<Command-c>", lambda e: None)
+    text.bind("<Control-a>", lambda e: (text.tag_add("sel", "1.0", "end-1c"), "break"))
+    text.bind("<Command-a>", lambda e: (text.tag_add("sel", "1.0", "end-1c"), "break"))
+
 def create_subtitle_window():
     root = tk.Tk()
     root.title("Live Transcription (Japanese)")
@@ -61,7 +76,7 @@ def create_subtitle_window():
     )
     text_widget.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
     text_widget.insert(tk.END, "🔊 Listening for speech...\n")
-    text_widget.config(state=tk.DISABLED)
+    make_readonly(text_widget)
 
     return root, text_widget
 
@@ -108,34 +123,46 @@ def save_temp_wav(audio_bytes):
 def transcribe_live_sentences():
     root, text_widget = create_subtitle_window()
 
+    stop_event = threading.Event()
+    threading.Thread(target=worker_loop, args=(stop_event,), daemon=True).start()
+
     def update_loop():
+        # Drain anything the worker produced
         try:
-            audio_bytes = record_until_silence()
-            if not audio_bytes:
-                root.after(100, update_loop)
-                return
+            while True:
+                block = ui_queue.get_nowait()
+                text_widget.insert(tk.END, block)
+                text_widget.see(tk.END)
+        except queue.Empty:
+            pass
+        root.after(50, update_loop)  # keep UI responsive
 
-            wav_path = save_temp_wav(audio_bytes)
+    def on_close():
+        stop_event.set()
+        root.destroy()
 
+    root.protocol("WM_DELETE_WINDOW", on_close)
+    update_loop()
+    root.mainloop()
+
+def worker_loop(stop_event):
+    while not stop_event.is_set():
+        audio_bytes = record_until_silence()
+        if not audio_bytes:
+            continue
+
+        wav_path = save_temp_wav(audio_bytes)
+        try:
             result = model.transcribe(wav_path, language=TARGET_LANGUAGE, fp16=False)
             text = result["text"].strip()
             text_en = translate_japanese_to_english(text)
             furigana_text = annotate_with_furigana(text)
+            block = f"📝 {furigana_text}\n→ {text_en}\n\n"
+            ui_queue.put(block)  # hand off to UI thread
+        finally:
+            try: os.remove(wav_path)
+            except OSError: pass
 
-            # Append text to the window
-            text_widget.config(state=tk.NORMAL)
-            text_widget.insert(tk.END, f"📝 {furigana_text}\n\n")
-            text_widget.insert(tk.END, f"{furigana_text}\n→ {text_en}\n\n" )
-            text_widget.see(tk.END)
-            text_widget.config(state=tk.DISABLED)
-
-            os.remove(wav_path)
-            root.after(100, update_loop)
-        except KeyboardInterrupt:
-            root.destroy()
-
-    root.after(100, update_loop)
-    root.mainloop()
 
 
 if __name__ == "__main__":
